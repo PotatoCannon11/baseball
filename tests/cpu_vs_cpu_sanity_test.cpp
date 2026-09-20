@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstdio>
+#include <algorithm>
 
 #include "cpu/at_bat.h"
 #include "cpu/batter_ai.h"
