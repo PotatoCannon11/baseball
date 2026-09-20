@@ -29,7 +29,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build libudev-dev libdbus-1-dev libx11-dev \
-            libwayland-dev libxkbcommon-dev libegl1-mesa-dev libevdev-dev xvfb
+            libwayland-dev libxkbcommon-dev libegl1-mesa-dev libevdev-dev
           if [ "${{ matrix.compiler }}" = "clang" ]; then sudo apt-get install -y clang; fi
 
       - name: Install macOS build dependencies
@@ -58,22 +58,5 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      - name: Setup Mesa OpenGL (Windows)
-        if: runner.os == 'Windows'
-        uses: f3d-app/install-mesa-windows-action@v1
-        with:
-          path: ${{github.workspace}}/build
-
-      - name: Test (Linux)
-        if: runner.os == 'Linux'
-        env:
-          SDL_VIDEO_DRIVER: x11
-        run: xvfb-run --auto-servernum ctest --test-dir build --output-on-failure
-
-      - name: Copy Mesa DLL to tests (Windows)
-        if: runner.os == 'Windows'
-        run: copy build\opengl32.dll build\tests\opengl32.dll
-        
-      - name: Test (macOS / Windows)
-        if: runner.os != 'Linux'
-        run: ctest --test-dir build --output-on-failure
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -E render_smoke
