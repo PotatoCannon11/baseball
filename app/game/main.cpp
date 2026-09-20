@@ -245,6 +245,13 @@ int main(int argc, char** argv) {
     join_flow.mark_claimed(input::PlayerSlot::kP1);
     join_flow.mark_claimed(input::PlayerSlot::kP2);
 
+    // Diagnostic: BASEBALL_DEBUG_INPUT=1 prints every mouse/keyboard/
+    // gamepad event the hub sees to stderr, to tell "SDL isn't delivering
+    // events to this window at all" (a platform/focus/permissions issue
+    // upstream of this codebase) apart from "events arrive but something
+    // downstream misroutes them" (a bug in here).
+    if (std::getenv("BASEBALL_DEBUG_INPUT")) hub.set_debug_logging(true);
+
     std::printf("%s\n", versus::kSafetyReminder);
 
     const alloc::AllocStats startup_alloc = alloc::get_stats();
