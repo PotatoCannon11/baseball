@@ -6,13 +6,19 @@
 // why): the mouse-drag source drives the batter role, and the keyboard
 // source (SPACE) drives the pitcher role's arm sweep + throw release.
 // versus::JoinFlow/step_or_pause and render::compute_camera are wired in
-// so the disconnect-pause and camera-director logic actually run in the
-// interactive app, not just in tests -- but there is no join/role-swap
-// UI yet (roles are fixed: mouse=batter, keyboard=pitcher for the whole
-// session) and no real at-bat loop (count/score/outs), so the shared HUD
-// stays the dev debug overlay rather than a real versus::PublicHud. Both
-// are tested independently (tests/versus_role_swap_test.cpp,
-// tests/versus_hud_privacy_test.cpp) against the library directly.
+// so the sim runs through the same pause-capable code path a real
+// controller session would use, and the camera-director logic actually
+// runs in the interactive app, not just in tests. Real disconnect
+// detection (versus::observe_hub) is deliberately NOT wired in here --
+// see the comment at its would-be call site below for why calling it
+// against dev-only slots is actively wrong, not just unverified. There
+// is also no join/role-swap UI yet (roles are fixed: mouse=batter,
+// keyboard=pitcher for the whole session) and no real at-bat loop
+// (count/score/outs), so the shared HUD stays the dev debug overlay
+// rather than a real versus::PublicHud. All of this is tested
+// independently (tests/versus_role_swap_test.cpp,
+// tests/versus_disconnect_pause_test.cpp, tests/versus_hud_privacy_
+// test.cpp) against the library directly.
 //
 // UNTESTED WITH REAL HARDWARE / REAL DISPLAY INTERACTION as of writing:
 // built and smoke-tested headless (offscreen) in this dev environment; a
@@ -234,13 +240,13 @@ int main(int argc, char** argv) {
 
     // Milestone 7 join flow: no join UI yet (see file header), so both
     // dev slots are auto-claimed once at startup rather than waiting for
-    // a "press a button to join" gesture. Real disconnect/reconnect
-    // (versus::observe_hub) only applies to actual SdlInputHub-tracked
-    // Joy-Cons, which this dev-only build never binds to a slot -- mouse
-    // and keyboard sources never disconnect, so should_pause() is always
-    // false here, but step_or_pause() is still used (instead of a raw
-    // sim::step() call) so this is the same code path a real controller
-    // session would run.
+    // a "press a button to join" gesture. versus::observe_hub() is
+    // deliberately NOT called on this JoinFlow (see the comment at its
+    // call site further down) -- it would immediately and permanently
+    // pause the sim, since P1/P2 here are dev sources never registered
+    // with the hub's real-gamepad binding table. step_or_pause() is
+    // still used (instead of a raw sim::step() call) so this is the same
+    // code path a real controller session's pause/resume would run.
     versus::JoinFlow join_flow;
     join_flow.mark_claimed(input::PlayerSlot::kP1);
     join_flow.mark_claimed(input::PlayerSlot::kP2);
@@ -282,7 +288,18 @@ int main(int argc, char** argv) {
         if (pitcher_pipeline.bias_calibrating() && now >= calibration_end_ns) {
             pitcher_pipeline.finish_bias_calibration();
         }
-        versus::observe_hub(&join_flow, hub);
+        // Deliberately NOT calling versus::observe_hub() here: it marks a
+        // slot disconnected whenever hub.joycon_for_slot() returns null,
+        // but P1/P2 in this dev-only build are mouse/keyboard sources
+        // that are never registered in the hub's real-gamepad binding
+        // table at all (hub.claim_slot() is never called for them) --
+        // joycon_for_slot() would therefore return null for both slots on
+        // literally the first frame, every time, permanently pausing the
+        // whole sim via should_pause() from tick 0 onward. observe_hub()
+        // only makes sense once a real join-flow UI exists that binds an
+        // actual Joy-Con to a slot via hub.claim_slot() -- wiring it in
+        // ahead of that UI existing was premature (this was a real bug,
+        // caught via a stuck tick=0 counter, not a hardware issue).
 
         // Fixed-timestep sim tick loop; frame_dt drives how many ticks
         // run this frame (0, 1, or a handful if the frame ran long).
@@ -433,6 +450,15 @@ int main(int argc, char** argv) {
 
         window.swap();
     }
+
+    // Unconditional (not behind a debug flag): a stuck tick counter --
+    // e.g. milestone 7's step_or_pause() being permanently paused by a
+    // wiring bug -- would otherwise look identical to a healthy run from
+    // the outside (exits cleanly, screenshot still captured, since a
+    // frame still renders even if the sim underneath it never advances).
+    // render_smoke's ctest registration checks this line's tick count
+    // against a plausible threshold for exactly that reason.
+    std::printf("final tick=%u\n", curr_state.tick);
 
     overlay.destroy();
     shadow_map.destroy();

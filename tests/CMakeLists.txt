@@ -137,5 +137,16 @@ add_test(NAME cpu_vs_cpu_sanity COMMAND test_cpu_vs_cpu_sanity)
 # via screenshot inspection during development. Needs a working GL context
 # (Mesa software rendering on Linux CI runners provides this; unverified
 # on macOS/Windows CI as of writing).
+#
+# PASS_REGULAR_EXPRESSION requires the printed final tick count to be at
+# least 3 digits (>=100) -- at the sim's 240 Hz tick rate, one simulated
+# second should reach roughly 240, so this stays well clear of a healthy
+# run even on a slow CI machine, while still catching a completely stuck
+# tick counter (e.g. a sim loop silently paused by a wiring bug: the app
+# still exits cleanly and a frame still renders even when the sim
+# underneath it never advances, which is exactly what let milestone 7's
+# observe_hub-on-dev-slots bug through everywhere except an actual
+# interactive run -- see git history around app/game/main.cpp).
 add_test(NAME render_smoke
          COMMAND game --hidden --seconds 1 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/render_smoke_test.ppm)
+set_tests_properties(render_smoke PROPERTIES PASS_REGULAR_EXPRESSION "final tick=[0-9][0-9][0-9]+")
