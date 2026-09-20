@@ -26,7 +26,15 @@ public:
 
     // Drains all pending SDL events once, dispatches them to the matching
     // source, and pumps every self-pumping source. Call once per frame.
+    // This must be the ONLY place that calls SDL_PollEvent: SDL's event
+    // queue is process-global, so a second poller elsewhere would steal
+    // events (e.g. mouse motion) before they ever reach the sources here.
     void poll(float dt_seconds);
+
+    // True if an SDL_EVENT_QUIT was seen during the most recent poll().
+    // Callers that need to know about window-close should check this
+    // instead of running their own SDL_PollEvent loop.
+    bool quit_requested() const { return quit_requested_; }
 
     // When enabled, prints every mouse/keyboard/gamepad event this hub
     // sees to stderr as it's dispatched. Diagnostic only, off by default:
@@ -66,6 +74,7 @@ private:
     MouseKeyboardSource mouse_source_{MouseKeyboardSource::Mode::kMouseDrag};
     MouseKeyboardSource keyboard_source_{MouseKeyboardSource::Mode::kKeyboard};
     bool debug_logging_ = false;
+    bool quit_requested_ = false;
 };
 
 }  // namespace input

@@ -38,6 +38,9 @@ void SdlInputHub::poll(float dt_seconds) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
+            case SDL_EVENT_QUIT:
+                quit_requested_ = true;
+                break;
             case SDL_EVENT_GAMEPAD_ADDED:
                 handle_device_added(event.gdevice.which);
                 break;
