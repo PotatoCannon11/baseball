@@ -66,8 +66,14 @@ jobs:
 
       - name: Test (Linux)
         if: runner.os == 'Linux'
+        env:
+          SDL_VIDEO_DRIVER: x11
         run: xvfb-run --auto-servernum ctest --test-dir build --output-on-failure
 
+      - name: Copy Mesa DLL to tests (Windows)
+        if: runner.os == 'Windows'
+        run: copy build\opengl32.dll build\tests\opengl32.dll
+        
       - name: Test (macOS / Windows)
         if: runner.os != 'Linux'
         run: ctest --test-dir build --output-on-failure
