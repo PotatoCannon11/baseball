@@ -1,4 +1,5 @@
 # Physics-first motion-controlled baseball sandbox
+[![CI](https://github.com/PotatoCannon11/baseball/actions/workflows/ci.yml/badge.svg)](https://github.com/PotatoCannon11/baseball/actions/workflows/ci.yml)
 
 Full design spec: [docs/ORIGINAL_PROMPT.md](docs/ORIGINAL_PROMPT.md). Read
 that before making architectural decisions -- it's the source of truth for
