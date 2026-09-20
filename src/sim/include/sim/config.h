@@ -29,6 +29,13 @@ struct SimConfig {
     double tick_dt_seconds = 1.0 / 240.0;
     double gravity_mps2 = 9.80665;
 
+    // Milestone 7 ready-up: "a fixed, deterministic timeout applies so
+    // nobody can stall forever." 15 s at the default 240 Hz tick rate --
+    // long enough that a human genuinely getting set (or recentering) is
+    // never rushed, short enough that an abandoned session doesn't hang
+    // the sim forever.
+    std::uint32_t ready_timeout_ticks = 240 * 15;
+
     BallProperties ball;
     BatProperties bat;
     Environment environment;

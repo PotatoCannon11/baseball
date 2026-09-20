@@ -1,9 +1,18 @@
-// Milestone 3: bare 3D scene. Renders the sim's interpolated state (ball,
-// shadow, lathe bat, camera, debug overlay). The batter role is driven by
-// the mouse-drag dev input source from milestone 2 -- NOT a real
-// controller (explicitly out of scope until real hardware is available;
-// see docs/ORIGINAL_PROMPT.md and README.md for why). The pitcher role
-// has no interaction yet (no arm/throw model until milestone 5).
+// Milestone 3 bare 3D scene, extended by milestone 7's local-versus
+// wiring. Renders the sim's interpolated state (ball, shadow, lathe bat,
+// camera, debug overlay). Two dev input sources stand in for two local
+// humans -- NOT real controllers (explicitly out of scope until real
+// hardware is available; see docs/ORIGINAL_PROMPT.md and README.md for
+// why): the mouse-drag source drives the batter role, and the keyboard
+// source (SPACE) drives the pitcher role's arm sweep + throw release.
+// versus::JoinFlow/step_or_pause and render::compute_camera are wired in
+// so the disconnect-pause and camera-director logic actually run in the
+// interactive app, not just in tests -- but there is no join/role-swap
+// UI yet (roles are fixed: mouse=batter, keyboard=pitcher for the whole
+// session) and no real at-bat loop (count/score/outs), so the shared HUD
+// stays the dev debug overlay rather than a real versus::PublicHud. Both
+// are tested independently (tests/versus_role_swap_test.cpp,
+// tests/versus_hud_privacy_test.cpp) against the library directly.
 //
 // UNTESTED WITH REAL HARDWARE / REAL DISPLAY INTERACTION as of writing:
 // built and smoke-tested headless (offscreen) in this dev environment; a
@@ -24,7 +33,7 @@
 #include "input/sdl_input_hub.h"
 #include "platform/clock.h"
 #include "platform/memory.h"
-#include "render/camera.h"
+#include "render/camera_director.h"
 #include "render/gl.h"
 #include "render/mesh.h"
 #include "render/overlay.h"
@@ -34,6 +43,8 @@
 #include "render/window.h"
 #include "sim/hash.h"
 #include "sim/step.h"
+#include "versus/join_flow.h"
+#include "versus/safety.h"
 
 namespace {
 
@@ -160,7 +171,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    render::Camera camera;
+    // Camera is a pure function of (phase, sim state, config) -- computed
+    // fresh every frame below, not stored as mutable state here. phase
+    // starts pre-pitch and is advanced by StepEvents in the tick loop.
+    const render::CameraDirectorConfig camera_config;
+    render::PitchPhase phase = render::PitchPhase::kWaitingForReady;
 
     // Directional light: ~30 degrees off vertical so look_at's up vector
     // never goes degenerate, high enough for a believable ball shadow.
@@ -194,12 +209,34 @@ int main(int argc, char** argv) {
     curr_state.bat.orientation = sim::Quat::identity();
     prev_state = curr_state;
 
-    // --- Input: mouse-drag dev backend drives the batter role, no real
-    // controller. See docs/ORIGINAL_PROMPT.md / README for why. -----------
+    // --- Input: two dev backends stand in for two local humans, no real
+    // controllers. See docs/ORIGINAL_PROMPT.md / README for why. Mouse
+    // drives the batter role (as before milestone 7); keyboard (SPACE)
+    // now also drives the pitcher role's arm sweep + throw release,
+    // exercising the second dev input path README already promised but
+    // this app never actually wired up. -----------------------------------
     input::SdlInputHub hub;
     input::MotionPipeline batter_pipeline;
+    input::MotionPipeline pitcher_pipeline;
     batter_pipeline.start_bias_calibration();
-    std::uint16_t input_sequence = 0;
+    pitcher_pipeline.start_bias_calibration();
+    std::uint16_t batter_input_sequence = 0;
+    std::uint16_t pitcher_input_sequence = 0;
+
+    // Milestone 7 join flow: no join UI yet (see file header), so both
+    // dev slots are auto-claimed once at startup rather than waiting for
+    // a "press a button to join" gesture. Real disconnect/reconnect
+    // (versus::observe_hub) only applies to actual SdlInputHub-tracked
+    // Joy-Cons, which this dev-only build never binds to a slot -- mouse
+    // and keyboard sources never disconnect, so should_pause() is always
+    // false here, but step_or_pause() is still used (instead of a raw
+    // sim::step() call) so this is the same code path a real controller
+    // session would run.
+    versus::JoinFlow join_flow;
+    join_flow.mark_claimed(input::PlayerSlot::kP1);
+    join_flow.mark_claimed(input::PlayerSlot::kP2);
+
+    std::printf("%s\n", versus::kSafetyReminder);
 
     const alloc::AllocStats startup_alloc = alloc::get_stats();
     if (std::getenv("BASEBALL_DEBUG_ALLOC")) alloc::debug_log_next_allocations(20);
@@ -212,20 +249,24 @@ int main(int argc, char** argv) {
     std::uint64_t last_step_ns = 0;
 
     while (running) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT) running = false;
-        }
-
         const std::uint64_t now = platform::monotonic_now_ns();
         const float frame_dt = static_cast<float>(static_cast<double>(now - last_frame_ns) / 1e9);
         last_frame_ns = now;
 
+        // hub.poll() is the ONLY SDL_PollEvent call in the app (SDL's event
+        // queue is global; a second poller here would steal mouse/keyboard
+        // events before the hub's sources ever saw them).
         hub.poll(frame_dt);
+        if (hub.quit_requested()) running = false;
         batter_pipeline.process(hub.mouse_drag_source().imu_samples());
+        pitcher_pipeline.process(hub.keyboard_source().imu_samples());
         if (batter_pipeline.bias_calibrating() && now >= calibration_end_ns) {
             batter_pipeline.finish_bias_calibration();
         }
+        if (pitcher_pipeline.bias_calibrating() && now >= calibration_end_ns) {
+            pitcher_pipeline.finish_bias_calibration();
+        }
+        versus::observe_hub(&join_flow, hub);
 
         // Fixed-timestep sim tick loop; frame_dt drives how many ticks
         // run this frame (0, 1, or a handful if the frame ran long).
@@ -234,17 +275,27 @@ int main(int argc, char** argv) {
         int ticks_this_frame = 0;
         while (tick_accumulator >= dt && ticks_this_frame < 8) {
             sim::SimInputs inputs{};
-            inputs.batter = batter_pipeline.to_player_input(curr_state.tick + 1, input_sequence++);
+            inputs.pitcher = pitcher_pipeline.to_player_input(curr_state.tick + 1, pitcher_input_sequence++);
+            inputs.batter = batter_pipeline.to_player_input(curr_state.tick + 1, batter_input_sequence++);
 
             const std::uint64_t step_start = platform::monotonic_now_ns();
             prev_state = curr_state;
-            curr_state = sim::step(curr_state, inputs, config);
+            sim::StepEvents events;
+            curr_state = versus::step_or_pause(curr_state, inputs, config, join_flow, &events);
             last_step_ns = platform::monotonic_now_ns() - step_start;
+
+            // Camera phase, driven by the same events the at-bat loop
+            // would use (milestone 6's cpu::at_bat / tools/cpu_vs_cpu
+            // pattern) -- see render/camera_director.h's PitchPhase.
+            if (events.ready_for_next_pitch) phase = render::PitchPhase::kWindup;
+            if (events.ball_released_this_tick) phase = render::PitchPhase::kInFlight;
+            if (events.bat_contact_occurred) phase = render::PitchPhase::kFollowBall;
 
             tick_accumulator -= dt;
             ++ticks_this_frame;
         }
         const double alpha = tick_accumulator / dt;
+        const render::Camera camera = render::compute_camera(phase, curr_state, camera_config);
 
         // --- Shadow pass ---------------------------------------------------
         shadow_shader.use();

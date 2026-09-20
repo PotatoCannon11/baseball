@@ -24,6 +24,12 @@ struct SimInputs {
 struct StepEvents {
     bool bat_contact_occurred = false;
     bool ball_released_this_tick = false;
+    // Edge-triggered: fires exactly on the tick both roles' kReady bits
+    // have been seen (or the config's ready timeout elapses), then the
+    // wait window immediately restarts. The driver (versus join-flow /
+    // CPU-vs-CPU loop) uses this as the deterministic signal for "begin
+    // the next pitch," rather than polling SimState::ready every tick.
+    bool ready_for_next_pitch = false;
 };
 
 // Milestone 4 physics: RK4 free flight (gravity, drag, Magnus, spin decay,

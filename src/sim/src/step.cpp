@@ -47,6 +47,28 @@ SimState step(const SimState& prev, const SimInputs& inputs, const SimConfig& co
     next.pitcher_arm = step_arm_from_input(inputs.pitcher, inputs.pitcher.buttons);
     next.rng = prev.rng;  // milestone 4/5 flight/collision/throw code doesn't consume randomness yet
 
+    // Ready-up (milestone 7): latch each role's kReady bit as seen; once
+    // both are latched, or the configured timeout elapses since the wait
+    // window started, fire the edge-triggered event and reset for the
+    // next window. Runs unconditionally, before the early returns below,
+    // so it always advances exactly once per tick regardless of what else
+    // happens this tick.
+    {
+        using common::InputButton;
+        const std::uint16_t kReadyBit = static_cast<std::uint16_t>(InputButton::kReady);
+        next.ready = prev.ready;
+        if ((inputs.pitcher.buttons & kReadyBit) != 0) next.ready.pitcher_ready = true;
+        if ((inputs.batter.buttons & kReadyBit) != 0) next.ready.batter_ready = true;
+
+        const bool both_ready = next.ready.pitcher_ready && next.ready.batter_ready;
+        const bool timed_out = (next.tick - next.ready.wait_start_tick) >= config.ready_timeout_ticks;
+        if (both_ready || timed_out) {
+            if (events) events->ready_for_next_pitch = true;
+            next.ready = ReadyState{};
+            next.ready.wait_start_tick = next.tick;
+        }
+    }
+
     // "Release is a shoulder-trigger button-up event": kThrow was held
     // last tick and is no longer held this tick.
     using common::InputButton;

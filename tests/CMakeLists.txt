@@ -94,6 +94,39 @@ add_executable(test_throw_spin throw_spin_test.cpp)
 target_link_libraries(test_throw_spin PRIVATE sim)
 add_test(NAME throw_spin COMMAND test_throw_spin)
 
+add_executable(test_sim_ready_up sim_ready_up_test.cpp)
+target_link_libraries(test_sim_ready_up PRIVATE sim)
+add_test(NAME sim_ready_up COMMAND test_sim_ready_up)
+
+add_executable(test_camera_director camera_director_test.cpp)
+target_link_libraries(test_camera_director PRIVATE render)
+add_test(NAME camera_director COMMAND test_camera_director)
+
+add_executable(test_versus_role_swap versus_role_swap_test.cpp)
+target_link_libraries(test_versus_role_swap PRIVATE versus sim)
+add_test(NAME versus_role_swap COMMAND test_versus_role_swap)
+
+add_executable(test_versus_calibration_persistence versus_calibration_persistence_test.cpp)
+target_link_libraries(test_versus_calibration_persistence PRIVATE versus)
+add_test(NAME versus_calibration_persistence COMMAND test_versus_calibration_persistence)
+
+add_executable(test_versus_disconnect_pause versus_disconnect_pause_test.cpp)
+target_link_libraries(test_versus_disconnect_pause PRIVATE versus sim)
+add_test(NAME versus_disconnect_pause COMMAND test_versus_disconnect_pause)
+
+add_executable(test_versus_hud_privacy versus_hud_privacy_test.cpp)
+target_link_libraries(test_versus_hud_privacy PRIVATE versus)
+target_compile_definitions(test_versus_hud_privacy PRIVATE BASEBALL_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME versus_hud_privacy COMMAND test_versus_hud_privacy)
+
+add_executable(test_versus_memory_budget versus_memory_budget_test.cpp)
+target_link_libraries(test_versus_memory_budget PRIVATE versus input alloc_counter SDL3::SDL3)
+add_test(NAME versus_memory_budget COMMAND test_versus_memory_budget)
+
+add_executable(test_two_human_replay_determinism two_human_replay_determinism_test.cpp)
+target_link_libraries(test_two_human_replay_determinism PRIVATE input sim)
+add_test(NAME two_human_replay_determinism COMMAND test_two_human_replay_determinism)
+
 add_executable(test_cpu_vs_cpu_sanity cpu_vs_cpu_sanity_test.cpp)
 target_link_libraries(test_cpu_vs_cpu_sanity PRIVATE cpu sim common)
 add_test(NAME cpu_vs_cpu_sanity COMMAND test_cpu_vs_cpu_sanity)

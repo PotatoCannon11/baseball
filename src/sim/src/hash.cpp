@@ -61,6 +61,10 @@ std::uint64_t hash_state(const SimState& state) {
     fold_vec3(&hash, state.pitcher_arm.angular_velocity);
     fold_u64(&hash, state.pitcher_arm.prev_buttons);
 
+    fold_u64(&hash, state.ready.pitcher_ready ? 1 : 0);
+    fold_u64(&hash, state.ready.batter_ready ? 1 : 0);
+    fold_u64(&hash, state.ready.wait_start_tick);
+
     for (std::uint64_t word : state.rng.s) fold_u64(&hash, word);
 
     return hash;

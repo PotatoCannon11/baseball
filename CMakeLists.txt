@@ -58,6 +58,7 @@ add_subdirectory(src/input)
 add_subdirectory(src/sim)
 add_subdirectory(src/cpu)
 add_subdirectory(src/render)
+add_subdirectory(src/versus)
 
 add_subdirectory(app/game)
 

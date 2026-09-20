@@ -6,7 +6,7 @@ that before making architectural decisions -- it's the source of truth for
 scope, priorities, and the rules (determinism, memory budget, sim isolation)
 that later milestones depend on.
 
-## Status: Milestone 6 (CPU pitcher/batter, at-bat loop)
+## Status: Milestone 7 (local two-player on one screen)
 
 Milestone 1 (platform layer, allocation counter, IMU measurement tool)
 built, ran, and passed its checks first -- see git history for that state
@@ -132,6 +132,96 @@ calibrated for a real Joy-Con's documented gyro range, which a literal
 Rendering and all input-hardware behavior remain **verified only on
 Linux, only with synthetic/dev inputs** -- no real Joy-Con has been
 available at any point in this project so far.
+
+## Milestone 7 (local two-player on one screen)
+
+New `src/versus/` library: join flow, role swap, per-player calibration
+persistence, private controller feedback, and the shared-HUD privacy
+contract, kept entirely out of `sim` (which still has no notion of
+player slots -- it only ever sees role-keyed `PlayerInput`, same as
+every earlier milestone) and out of `render` (the camera director is the
+one exception that reads `SimState`, in the direction the architecture
+spec allows).
+
+- `sim/state.h` gains `ReadyState` (`pitcher_ready`/`batter_ready`
+  latches + a wait-window start tick) and `step.h` gains
+  `StepEvents::ready_for_next_pitch`, an edge-triggered signal fired once
+  both roles' `kReady` bit have been seen or `SimConfig::
+  ready_timeout_ticks` elapses. This is the one piece of milestone 7
+  state that lives inside `SimState` itself, per spec ("a fixed,
+  deterministic timeout applies so nobody can stall forever. This state
+  lives in SimState") -- everything else below is input-layer/driver
+  state, following the same split milestone 6 established for at-bat
+  orchestration.
+- `versus::RoleAssignment` / `should_swap_role`: which `PlayerSlot` holds
+  which role, and a pure scheduling function (manual / every N at-bats /
+  every half-inning) for when to swap. Deliberately outside `SimState` --
+  the sim only ever sees `SimInputs::pitcher`/`::batter`, so slot-to-role
+  mapping is decided identically by whoever is driving the sim, with no
+  extra sim-level machinery needed.
+- `versus::CalibrationStore`: gyro bias, virtual arm length, filter gain,
+  and last recenter offset, one flat file per `PlayerSlot` (never per
+  role or per device) under the platform pref path, same magic-header/
+  fixed-buffer convention as `input::PlayerInputRecorder`.
+- `versus::JoinFlow` + `step_or_pause`: an explicit
+  unclaimed/active/disconnected state machine per slot, fully testable
+  without SDL (a "simulated controller disconnect" is a direct
+  `mark_disconnected()` call). `step_or_pause` calls `sim::step()`
+  normally, or returns the previous state completely unchanged (tick
+  does not advance, no input is synthesized) while any bound slot is
+  disconnected. `versus::observe_hub` is the thin, untested-without-
+  hardware glue that watches a real `SdlInputHub` and drives those
+  transitions.
+- `versus::PrivateFeedbackEvent` / `play_private_feedback`: a rumble
+  pattern per grip preset plus a ready/recenter confirmation, routed to
+  one player's controller only. `JoyconSource` gained `rumble()`/
+  `set_led()` wrapping SDL3's `SDL_RumbleGamepad`/`SDL_SetGamepadLED` --
+  SDL3 has no capability-query API for either (unlike SDL2's
+  `SDL_GameControllerHasRumble`), so support is only knowable from the
+  call's own return value. **Unverified on real hardware**, same as
+  every other Joy-Con-dependent path in this project.
+- `versus::PublicHud`: the shared-screen data contract (count, score,
+  outs, last pitch result, speed after release only) -- enforced by
+  having no field capable of carrying grip/pitch-type/aim data at all,
+  not by a runtime filter. `versus::kSafetyReminder` is the wrist-strap/
+  clear-space/keep-distance text shown at launch.
+- `render::compute_camera`: a pure function of `(PitchPhase, SimState,
+  CameraDirectorConfig)` -- behind-the-mound framing pre-release,
+  center-field-high in flight, a follow cam after contact. Takes no
+  grip/pitch-type/aim parameter, so it has no path to leak that
+  information even by accident.
+- `app/game` now drives both roles interactively: mouse (batter, as
+  before) and keyboard/SPACE (pitcher's arm sweep + throw release, the
+  second dev input path the input-layer README section always promised
+  but this app never actually wired up). Both dev slots auto-join at
+  startup (there's no join-flow UI yet), `step_or_pause`/`observe_hub`
+  and `compute_camera` are wired into the frame loop, and the safety
+  reminder prints once at launch. The shared HUD is still the milestone-3
+  debug overlay, not a real `versus::PublicHud` -- there's no count/
+  score/outs game loop in the interactive app yet (only in
+  `tools/cpu_vs_cpu`/the at-bat tests), so there is nothing real yet for
+  a play-mode HUD to display.
+- 8 new tests: `sim_ready_up`, `camera_director`, `versus_role_swap`
+  (including the spec's "role swap mid-session keeps SimState valid and
+  hash-stable"), `versus_calibration_persistence` ("survives a role swap
+  and a device swap"), `versus_disconnect_pause` ("pauses on a tick
+  boundary and resumes cleanly"), `versus_hud_privacy` ("renders no
+  pitch-type or aim information before release"), `versus_memory_budget`
+  ("memory with two humans is within the per-player input budget of
+  memory with zero" -- literally zero allocations either way, since
+  every per-player structure here is fixed-size), and
+  `two_human_replay_determinism` ("two recorded human input streams
+  replayed together produce identical hashes on repeat runs"). 34 tests
+  total.
+
+Not yet built: the actual join-flow UI (press-a-button-to-join, a
+reconnect prompt), a role-swap trigger wired into any real game loop, the
+"tells" windup-animation flag (there's no per-grip animation content yet
+for it to switch -- see `versus/config.h`'s comment), and a play-mode
+`PublicHud` actually driving on-screen count/score/outs. These need
+either a real at-bat game loop in `app/game` (beyond this milestone's
+scope, which was the library + its validation tests) or real hardware to
+design the join UI against.
 
 ## Building
 

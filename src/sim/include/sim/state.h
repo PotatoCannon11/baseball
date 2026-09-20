@@ -37,11 +37,25 @@ struct BatState {
     Vec3 angular_velocity;   // rad/s
 };
 
+// Milestone 7: "a pitch cycle starts when both bound humans signal ready
+// (or the CPU auto-readies). A fixed, deterministic timeout applies so
+// nobody can stall forever. This state lives in SimState." Role-agnostic
+// on purpose -- it tracks the PITCHER/BATTER roles' kReady bits, exactly
+// like every other field of SimInputs, so it has no notion of player
+// slots, devices, or humans-vs-CPU (that mapping is an input-layer
+// concern, kept out of the sim per the architecture spec).
+struct ReadyState {
+    bool pitcher_ready = false;
+    bool batter_ready = false;
+    std::uint32_t wait_start_tick = 0;  // tick the current ready-wait window began
+};
+
 struct SimState {
     std::uint32_t tick = 0;
     BallState ball;
     BatState bat;
     ArmState pitcher_arm;
+    ReadyState ready;
     RngState rng;
 };
 

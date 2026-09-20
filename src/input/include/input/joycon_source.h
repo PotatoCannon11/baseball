@@ -2,6 +2,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstdint>
+
 #include "input/device_profile.h"
 #include "input/imu_source.h"
 
@@ -27,6 +29,23 @@ public:
 
     void ingest(const SDL_Event& event);
     void mark_disconnected() { connected_ = false; }
+
+    // Milestone 7 private feedback (rumble pattern per grip, LED/haptic
+    // confirmation): thin wrappers over SDL3's per-gamepad rumble/LED
+    // calls, kept here rather than exposing the raw SDL_Gamepad* to
+    // higher layers (only the input layer touches SDL device handles
+    // directly, per architecture). SDL3 has no capability-query API for
+    // either feature (unlike SDL2's SDL_GameControllerHasRumble) -- the
+    // return value of the call itself is the only way to know whether it
+    // was honored, which is why both return bool rather than void.
+    // UNVERIFIED on real hardware: no Joy-Con has been available to this
+    // project to confirm either actually does something physical.
+    bool rumble(std::uint16_t low_frequency, std::uint16_t high_frequency, std::uint32_t duration_ms) {
+        return SDL_RumbleGamepad(gamepad_, low_frequency, high_frequency, duration_ms);
+    }
+    bool set_led(std::uint8_t red, std::uint8_t green, std::uint8_t blue) {
+        return SDL_SetGamepadLED(gamepad_, red, green, blue);
+    }
 
     bool is_connected() const override { return connected_; }
     const ImuRing& imu_samples() const override { return imu_ring_; }
