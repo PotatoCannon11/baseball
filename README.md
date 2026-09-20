@@ -6,6 +6,10 @@ that before making architectural decisions -- it's the source of truth for
 scope, priorities, and the rules (determinism, memory budget, sim isolation)
 that later milestones depend on.
 
+Current status and a running handoff log for agents on other platforms:
+[docs/PROGRESS.md](docs/PROGRESS.md). Check it before starting work, and
+append to its Log section when you finish a session.
+
 ## Status: Milestone 7 (local two-player on one screen)
 
 Milestone 1 (platform layer, allocation counter, IMU measurement tool)
