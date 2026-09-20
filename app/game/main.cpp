@@ -119,6 +119,15 @@ bool write_ppm(const char* path, int width, int height, const unsigned char* rgb
 int main(int argc, char** argv) {
     const Args args = parse_args(argc, argv);
 
+    // Default SDL behavior is to swallow the mouse click that first gives
+    // a freshly-launched window focus, rather than delivering it as a
+    // real button-down event -- so the very first click on a
+    // just-opened window (which is also the click that would start a
+    // mouse-drag swing) does nothing. Reproduces consistently on macOS,
+    // where a plain Terminal-launched app always starts unfocused;
+    // whether a given Linux window manager also eats it is WM-dependent.
+    SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+
     if (!SDL_Init(SDL_INIT_GAMEPAD | SDL_INIT_EVENTS | SDL_INIT_VIDEO)) {
         std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;

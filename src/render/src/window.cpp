@@ -22,6 +22,14 @@ bool Window::create(const char* title, int width, int height, bool visible) {
         return false;
     }
 
+    // Belt-and-suspenders alongside SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH: a
+    // freshly-created window isn't guaranteed to already be the focused/
+    // frontmost one on every platform/launch context (e.g. launched from
+    // a script rather than double-clicked), and keyboard input in
+    // particular needs real focus, not just click-through. No-op if
+    // already focused; harmless on a hidden window (headless/test runs).
+    if (visible) SDL_RaiseWindow(window_);
+
     gl_context_ = SDL_GL_CreateContext(window_);
     if (!gl_context_) {
         std::fprintf(stderr, "render::Window::create: SDL_GL_CreateContext failed: %s\n", SDL_GetError());
