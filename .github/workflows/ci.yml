@@ -60,9 +60,9 @@ jobs:
 
       - name: Setup Mesa OpenGL (Windows)
         if: runner.os == 'Windows'
-        uses: pal1000/setup-mesa@v1
+        uses: f3d-app/install-mesa-windows-action@v1
         with:
-          gallium-drivers: swrast
+          path: ${{github.workspace}}/build
 
       - name: Test (Linux)
         if: runner.os == 'Linux'
